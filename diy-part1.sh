@@ -1,18 +1,11 @@
 #!/bin/bash
-#
-# https://github.com/P3TERX/Actions-OpenWrt
-# File name: diy-part1.sh
-# Description: OpenWrt DIY script part 1 (Before Update feeds)
-#
-# Copyright (c) 2019-2024 P3TERX <https://p3terx.com>
-#
-# This is free software, licensed under the MIT License.
-# See /LICENSE for more information.
-#
+# DIY 脚本 part1：在 `./scripts/feeds update -a` 之前执行，追加第三方软件源。
 
-# Uncomment a feed source
-#sed -i 's/^#\(.*helloworld\)/\1/' feeds.conf.default
+# vantage 主题（仓库内含 luci-theme-vantage 与 luci-app-vantage）
+echo 'src-git vantage https://github.com/anothaDev/luci-theme-vantage' >> feeds.conf.default
 
-# Add a feed source
-echo 'src-git helloworld https://github.com/fw876/helloworld' >>feeds.conf.default
-#echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >>feeds.conf.default
+# alist 网盘聚合（luci-app-alist + alist 本体）
+echo 'src-git alist https://github.com/sbwml/luci-app-alist' >> feeds.conf.default
+
+# mosdns DNS 分流 / 去广告（luci-app-mosdns + mosdns 本体）
+echo 'src-git mosdns https://github.com/sbwml/luci-app-mosdns' >> feeds.conf.default

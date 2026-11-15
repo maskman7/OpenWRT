@@ -1,17 +1,18 @@
 #!/bin/bash
-#
-# https://github.com/P3TERX/Actions-OpenWrt
-# File name: diy-part2.sh
-# Description: OpenWrt DIY script part 2 (After Update feeds)
-#
-# Copyright (c) 2019-2024 P3TERX <https://p3terx.com>
-#
-# This is free software, licensed under the MIT License.
-# See /LICENSE for more information.
-#
+# DIY 脚本 part2：feeds 安装完成、make defconfig 之前执行。
+# 在这里改：默认 IP、主机名、默认主题。
 
-# Modify default IP
-#sed -i 's/192.168.1.1/192.168.18.254/g' package/base-files/files/bin/config_generate
+# 1. 默认管理 IP -> 192.168.18.254
+sed -i 's/192.168.1.1/192.168.18.254/g' package/base-files/files/bin/config_generate
 
-# Modify hostname
-#sed -i "s/hostname='ImmortalWrt'/hostname='MaskMan7WRT'/g" package/base-files/files/bin/config_generate
+# 2. 主机名 -> MaskMan7WRT（immortalwrt 默认主机名为 ImmortalWrt）
+sed -i "s/hostname='ImmortalWrt'/hostname='MaskMan7WRT'/g" package/base-files/files/bin/config_generate
+
+# 3. 默认主题 -> vantage（写入 uci-defaults，首启自动生效）
+mkdir -p package/base-files/files/etc/uci-defaults
+cat > package/base-files/files/etc/uci-defaults/99-default-theme <<'EOF'
+#!/bin/sh
+uci -q set luci.main.mediaurlbase=/luci-static/vantage
+uci -q commit luci
+EOF
+chmod +x package/base-files/files/etc/uci-defaults/99-default-theme
