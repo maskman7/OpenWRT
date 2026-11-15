@@ -1,6 +1,11 @@
 #!/bin/bash
 # DIY 脚本 part2：feeds 安装完成、make defconfig 之前执行。
-# 在这里改：默认 IP、主机名、默认主题。
+
+# 0. 移除打不上的 fullcone 补丁
+#    master 上游 firewall4 已更新，immortalwrt 自带的 001-fullcone-nat 补丁
+#    Hunk#1 对不上源码，导致 firewall4 编译失败；删除后按上游干净源码编译。
+#    代价：丢失 FullCone NAT 支持（不影响 Docker 与日常上网）。
+rm -f package/network/config/firewall4/patches/001-firewall4-add-support-for-fullcone-nat.patch
 
 # 1. 默认管理 IP -> 192.168.18.254
 sed -i 's/192.168.1.1/192.168.18.254/g' package/base-files/files/bin/config_generate
