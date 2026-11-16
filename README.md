@@ -85,7 +85,7 @@
 6. **后期在线装包的限制（snapshot）**：用户态服务/面板/库（daemon、`luci-app-*`、lib）可在 iStore 软件中心或 `apk add <包名>` 直接装；但带内核模块的包（`kmod-*`）必须与当前内核版本严格匹配，snapshot 内核滚动更新后在线 kmod 可能装不上或版本不符——这类需求最好在编译阶段就写进 `.config` 同树编译。第三方 feed（alist/mosdns/vantage）写入固件的是编译时快照地址，snapshot 滚动后其在线源可能 404；官方 base/packages/luci/routing/telephony/video 源不受影响。
 7. **iStore 软件中心兼容性**：`luci-app-store` 是 Lua 面板，经 `luci-lua-runtime` 在新 luci 下运行；内存系统在线安装时依赖全部拉齐、控制器/视图/中文/自启就位，但 Lua 页面在新 JS 侧边栏的实际渲染需固化后浏览器核对。商店内第三方应用面向多平台打包，官方 README 自陈"商店里的插件不一定都能在本固件装上"，其依赖与 snapshot apk/新 luci 的兼容性需逐个实测；装不上的应用仍可走官方源 `apk add` 或编译阶段纳入 `.config`。
 8. **老式 Lua CBI 面板需 `luci-compat`**：新 luci 默认只带 `luci-lua-runtime`，不含旧版 `luci.cbi`；第三方老式 Lua 面板（如 zerotier 面板）若 `require("luci.cbi")`，缺 `luci-compat` 会报 `module 'luci.cbi' not found`。本固件已编入 `luci-compat` 兜底；但个别更老面板还可能依赖已被 master 移除的其他 Lua 模块，仍可能报错，以固化后实测为准。
-9. **Packet path 流程图未移植到概览**：vantage `nftflow` 只在 状态 → Nftables 页挂载，其 `attach()` 等待该页规则表 DOM 后再叠加流程图；概览页没有这层规则表 DOM，独立复用需另写概览卡片并在真机调试闭环，本轮暂不移植，流程图保留在 Nftables 页查看。
+9. **Packet path 流程图已挂到概览顶端**：vantage `nftflow` 原本只在 状态 → Nftables 页由 `menu-vantage.js` 按 `data-page==='admin-status-nftables'` 拦截挂载。源码复核其 `draw()` 主体由 `nft --json list ruleset` 数据独立生成，不依赖 Nftables 页规则卡；耦合点仅入口页面判断与 `.nft-table` 锚点。方案：概览 `include/15_flow.js` 注册一张卡片，先放 `.nft-table` 占位（CSS 默认 `display:none`，无空框残留），再 `L.require('vantage-theme.nftflow').attach(#view)`；卡片仅首次 render 返回占位，概览轮询重建 DOM 时返回 `null` 保留已画流程图。已在内存系统实测：流程图在概览顶端、轮询不丢、无重复挂载。规则表模式下规则步骤条件对齐依赖 Nftables 页原始规则行，概览会略简，默认"流向"模式完整。
 
 ## 五补、编译排错记录
 
@@ -135,4 +135,5 @@
 - [ ] 固化后核对：默认 IP `192.168.18.254`、主机名 `MaskMan7WRT`、vantage 主题、Docker 与各插件开机自启。
 - [x] 本轮已加入：upnp、nlbwmon（流量监控）、ttyd（网页终端）、kmod-tun（TUN 模块）；zerotier 本体/面板后期手动安装。
 - [ ] 待重编验证：part1 补回 istore feed、part2 兜底显式 install store 链后，新固件 world 应含 `luci-app-store` / `luci-lib-taskd` / `taskd` / `luci-lib-xterm`。
+- [x] Packet path 流程图已移植到概览顶端（内存系统实测通过）；part2 已内联 `15_flow.js`，重编后随固件固化。
 - [ ] 待定：代理最终选 OpenClash 还是 Passwall；是否再追加 watchcat/sqm/tailscale 等插件。
