@@ -21,8 +21,9 @@
 - **默认 IP**：在 `diy-part2.sh` 里 sed 改 `config_generate` → `192.168.18.254`。
 - **主机名**：在 `diy-part2.sh` 里 sed 改 `config_generate` → `MaskMan7WRT`（openwrt 默认主机名为 `OpenWrt`）。
 - **默认主题**：在 `diy-part2.sh` 写入 uci-defaults，首启把 `luci.main.mediaurlbase` 指向 `/luci-static/vantage`。
-- **默认语言**：中文翻译包在 `.config` 勾选 `luci-i18n-*-zh-cn`；`diy-part2.sh` 的 uci-defaults 把 `luci.main.lang` 设为 `zh_cn`（加载时自动归一化为 `zh-cn` 匹配 `.lmo`），首启强制简体中文，不跟随浏览器。
-- **概览移除"系统信息"卡片**：`diy-part2.sh` 用 `find ... -delete` 删掉 luci-mod-status 的 `10_system.js`（概览 include 卡片按文件名排序加载，删掉即不渲染）。Packet path 流程图是 vantage 主题挂在 **状态 → Nftables** 页的组件，不在概览，保持原样未动。
+- **默认语言**：`.config` 用翻译开关 `CONFIG_LUCI_LANG_zh_Hans=y` 打开简体中文；`diy-part2.sh` 的 uci-defaults 把 `luci.main.lang` 设为 `zh_cn`（加载时归一化为 `zh-cn` 匹配 `.lmo`），首启强制简体中文，不跟随浏览器。
+- **概览移除"系统信息"卡片**：`diy-part2.sh` 明确删除 luci-mod-status 的 `10_system.js`（概览 include 卡片按文件名排序加载，删掉即不渲染），并在编译日志打印残留数量便于核对。
+- **Packet path 流程图**：vantage 的 `nftflow` 组件只在 状态 → Nftables 页挂载，且依附该页规则表 DOM；概览页没有这层结构，本轮不移植到概览顶端（原因见风险段）。
 
 ## 三、GitHub 网页操作步骤
 
@@ -48,27 +49,30 @@
 - SMB：`ksmbd-server`、`luci-app-ksmbd`
 - LuCI Web 基础（必须显式选，否则 80 无服务）：`uhttpd`、`uhttpd-mod-ubus`、`uhttpd-mod-ucode`、`luci-mod-admin-full`、`luci-mod-network`、`luci-mod-status`、`luci-mod-system`、`luci-app-uhttpd`
 - 运维小工具：`luci-app-upnp`、`luci-app-nlbwmon`、`luci-app-ttyd`（本体 miniupnpd/nlbwmon/ttyd 由依赖自动拉取）
-- 软件包管理：`luci-app-package-manager`（系统 → Software 面板，后期在线搜装/卸载；apk 本体、rpcd 后端与官方软件源默认内置，无需另勾）
-- 组网：`kmod-tun`（TUN 内核模块，与内核同树编译，提供 `/dev/net/tun`）、`zerotier`（ZeroTier 客户端；官方源无 `luci-app-zerotier` 面板，用命令行/UCI 管理）
-- 中文语言包：`luci-i18n-base-zh-cn`、`luci-i18n-dockerman-zh-cn`、`luci-i18n-adguardhome-zh-cn`、`luci-i18n-ksmbd-zh-cn`、`luci-i18n-ddns-zh-cn`、`luci-i18n-upnp-zh-cn`、`luci-i18n-nlbwmon-zh-cn`、`luci-i18n-ttyd-zh-cn`、`luci-i18n-uhttpd-zh-cn`、`luci-i18n-package-manager-zh-cn`
+- 软件包管理：**不**编入官方 `luci-app-package-manager` 面板，在线装包统一走 iStore 软件中心；命令行 `apk add <包名>` 同样可用（apk 本体、rpcd 后端与官方软件源默认内置）。
+- Lua 兼容层：`luci-compat`（提供旧版 `luci.cbi` 等 Lua CBI 模块；老式 Lua CBI 第三方面板缺它会报 `module 'luci.cbi' not found`。新 luci 默认只带 `luci-lua-runtime`，不含 CBI）。
+- 组网：`kmod-tun`（TUN 内核模块，与内核同树编译，提供 `/dev/net/tun`）；`zerotier` 本体与面板不预置，后期在 iStore / `apk add zerotier` 手动安装。
+- 中文界面：`.config` 用翻译开关 `CONFIG_LUCI_LANG_zh_Hans=y`（luci-base → Translations → 简体中文）。打开后 luci.mk 自动把所有已选主包的 `luci-i18n-*-zh-cn` 翻译包纳入；**不要**逐个手写 `CONFIG_PACKAGE_luci-i18n-*-zh-cn=y`——这些是 HIDDEN 包，会被 `make defconfig` 按默认逻辑清掉。
 - 基础：`curl`、`ca-certificates`、`luci-app-ddns`
 
-> 中文说明：第三方 `alist`、`mosdns` 官方源无对应 `luci-i18n-*-zh-cn` 包，其界面语言由各自前端自带；未翻译到的少量词条仍显示英文。
+> 中文说明：第三方 `alist`、`mosdns` 官方无对应 `luci-i18n-*-zh-cn` 包，界面语言由各自前端自带；未翻译到的少量词条仍显示英文。
 
 ### 第三方 feed（地址在 diy-part1.sh，兼容性需实测）
 - 主题：`luci-theme-vantage`（anothaDev/luci-theme-vantage）
 - 网盘：`alist`、`luci-app-alist`（sbwml/luci-app-alist）
 - DNS：`mosdns`、`luci-app-mosdns`（sbwml/luci-app-mosdns）
+- 软件中心：`luci-app-store`（linkease/istore，iStore 一键装应用；后端 `taskd`、`luci-lib-taskd`、`luci-lib-xterm` 与 Lua 运行时 `luci-lua-runtime` 由依赖自动拉取；界面中文随主包内置，无独立 i18n 包；已适配 apk）
 
 ### 暂缓：OpenClash
 - 官方源不带 OpenClash，第三方依赖杂、与新 luci 兼容性风险高，首版先在 `.config` 注释掉，保证基础固件先出包。
 - 加回：part1 追加 `src-git openclash https://github.com/vernesong/OpenClash`，再取消 `.config` 里 `# CONFIG_PACKAGE_luci-app-openclash=y` 的注释。
 
-### ZeroTier 固化后配置
-- 固件已带 `kmod-tun` + `zerotier`，`diy-part2.sh` 的 uci-defaults 已 `/etc/init.d/zerotier enable` 开机自启。
-- 进系统后执行 `zerotier-cli join <你的网络ID>`，再登录 my.zerotier.com 后台给本机设备授权；`zerotier-cli status` 看在线状态、`zerotier-cli peers` 看对端。
+### ZeroTier（后期手动安装，不预置进固件）
+- 固件只带 `kmod-tun`（TUN 内核模块，同树编译）；`zerotier` 本体与面板不在固件内。
+- 需要时在 iStore 软件中心搜装，或命令行 `apk add zerotier`；装完 `/etc/init.d/zerotier enable && /etc/init.d/zerotier start`。
+- 之后执行 `zerotier-cli join <你的网络ID>`，再登录 my.zerotier.com 后台给本机设备授权；`zerotier-cli status` 看在线状态、`zerotier-cli peers` 看对端。
 - 要打通局域网 ↔ ZeroTier 虚拟网：防火墙里把 zt 虚拟网卡加入 LAN 覆盖设备，并按需加转发规则。
-- 官方源无 `luci-app-zerotier` 图形面板，以上用命令行/UCI 管理；想要面板需另接第三方 feed，与新 luci 兼容性自担。
+- 官方源无图形面板；第三方 Lua CBI 面板需配合已编入的 `luci-compat`，兼容性以固化后实测为准。
 - 不建议改在 dockerman 容器里跑：ZeroTier 需 TUN，容器方式仍要宿主先有 kmod-tun，还要挂 `/dev/net/tun`、加 `NET_ADMIN`，组网转发更绕。
 
 ## 五、风险与注意事项
@@ -78,7 +82,10 @@
 3. **DNS 端口不冲突**：AdGuardHome 与 mosdns 都管 DNS，装完错开端口、明确分工，避免抢占 53。
 4. **电脑网卡同网段**：默认 IP 改为 `192.168.18.254`，进后台前把电脑网卡设为 `192.168.18.2/24`。
 5. **刷机两步走，别在 U-Boot 直刷 sysupgrade.bin**：先在 U-Boot「uImage 启动」页用 `initramfs-uImage.itb` 内存启动 → 进 OpenWrt 后，再用 LuCI 或 `sysupgrade -v` 刷 `squashfs-sysupgrade.bin` 写 eMMC。`sysupgrade.bin` 是 legacy 升级格式，不能在 U-Boot 直刷（上次半砖即由此导致）。
-6. **后期在线装包的限制（snapshot）**：用户态服务/面板/库（daemon、`luci-app-*`、lib）可在 系统 → Software 面板或 `apk add <包名>` 直接装；但带内核模块的包（`kmod-*`）必须与当前内核版本严格匹配，snapshot 内核滚动更新后在线 kmod 可能装不上或版本不符——这类需求最好在编译阶段就写进 `.config` 同树编译。第三方 feed（alist/mosdns/vantage）写入固件的是编译时快照地址，snapshot 滚动后其在线源可能 404；官方 base/packages/luci/routing/telephony/video 源不受影响。
+6. **后期在线装包的限制（snapshot）**：用户态服务/面板/库（daemon、`luci-app-*`、lib）可在 iStore 软件中心或 `apk add <包名>` 直接装；但带内核模块的包（`kmod-*`）必须与当前内核版本严格匹配，snapshot 内核滚动更新后在线 kmod 可能装不上或版本不符——这类需求最好在编译阶段就写进 `.config` 同树编译。第三方 feed（alist/mosdns/vantage）写入固件的是编译时快照地址，snapshot 滚动后其在线源可能 404；官方 base/packages/luci/routing/telephony/video 源不受影响。
+7. **iStore 软件中心兼容性**：`luci-app-store` 是 Lua 面板，经 `luci-lua-runtime` 在新 luci 下运行；内存系统在线安装时依赖全部拉齐、控制器/视图/中文/自启就位，但 Lua 页面在新 JS 侧边栏的实际渲染需固化后浏览器核对。商店内第三方应用面向多平台打包，官方 README 自陈"商店里的插件不一定都能在本固件装上"，其依赖与 snapshot apk/新 luci 的兼容性需逐个实测；装不上的应用仍可走官方源 `apk add` 或编译阶段纳入 `.config`。
+8. **老式 Lua CBI 面板需 `luci-compat`**：新 luci 默认只带 `luci-lua-runtime`，不含旧版 `luci.cbi`；第三方老式 Lua 面板（如 zerotier 面板）若 `require("luci.cbi")`，缺 `luci-compat` 会报 `module 'luci.cbi' not found`。本固件已编入 `luci-compat` 兜底；但个别更老面板还可能依赖已被 master 移除的其他 Lua 模块，仍可能报错，以固化后实测为准。
+9. **Packet path 流程图未移植到概览**：vantage `nftflow` 只在 状态 → Nftables 页挂载，其 `attach()` 等待该页规则表 DOM 后再叠加流程图；概览页没有这层规则表 DOM，独立复用需另写概览卡片并在真机调试闭环，本轮暂不移植，流程图保留在 Nftables 页查看。
 
 ## 五补、编译排错记录
 
@@ -112,7 +119,7 @@
 - `luci-app-sqm`：带宽 QoS 调度
 - `luci-app-tailscale`：异地内网穿透（替代/补充 ZeroTier）
 
-> upnp / nlbwmon / ttyd / zerotier 已在本轮正式加入 `.config`，不再属于可选。
+> upnp / nlbwmon / ttyd / kmod-tun 已在本轮正式加入 `.config`；zerotier 本体与面板后期手动安装。
 
 ## 七、待办
 
@@ -120,5 +127,5 @@
 - [ ] 把补了 Web 基础包的新 `.config` 提交到 GitHub，重新触发 Action 编译。
 - [ ] 新固件出包后：U-Boot「uImage 启动」页启动新 `initramfs-uImage.itb` → 进系统确认 LuCI 面板/插件正常 → 上传 `squashfs-sysupgrade.bin` 执行系统内升级写 eMMC。
 - [ ] 固化后核对：默认 IP `192.168.18.254`、主机名 `MaskMan7WRT`、vantage 主题、Docker 与各插件开机自启。
-- [x] 本轮已加入：upnp、nlbwmon（流量监控）、ttyd（网页终端）、zerotier + kmod-tun（组网）。
+- [x] 本轮已加入：upnp、nlbwmon（流量监控）、ttyd（网页终端）、kmod-tun（TUN 模块）；zerotier 本体/面板后期手动安装。
 - [ ] 待定：代理最终选 OpenClash 还是 Passwall；是否再追加 watchcat/sqm/tailscale 等插件。
