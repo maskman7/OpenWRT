@@ -14,5 +14,6 @@ cat > package/base-files/files/etc/uci-defaults/99-default-theme <<'EOF'
 uci -q set luci.main.mediaurlbase=/luci-static/vantage
 uci -q set luci.main.lang=zh_cn
 uci -q commit luci
+/etc/init.d/zerotier enable
 EOF
 chmod +x package/base-files/files/etc/uci-defaults/99-default-theme
