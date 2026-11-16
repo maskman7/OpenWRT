@@ -22,3 +22,6 @@ STATUS_INC="feeds/luci/modules/luci-mod-status/htdocs/luci-static/resources/view
 rm -f "$STATUS_INC/10_system.js"
 find feeds package -type f -name '10_system.js' -path '*view/status/include*' -delete
 echo "[part2] 10_system.js 残留数量: $(find feeds package -type f -name '10_system.js' -path '*view/status/include*' | wc -l)"
+
+# 5. 显式把 iStore 及其依赖链链接进 package/feeds（兜底：install -a 对子目录 feed 可能漏装）
+./scripts/feeds install -p istore luci-app-store luci-lib-taskd taskd luci-lib-xterm || true

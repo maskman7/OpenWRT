@@ -9,3 +9,6 @@ echo 'src-git alist https://github.com/sbwml/luci-app-alist' >> feeds.conf.defau
 
 # mosdns DNS 分流 / 去广告（luci-app-mosdns + mosdns 本体）
 echo 'src-git mosdns https://github.com/sbwml/luci-app-mosdns' >> feeds.conf.default
+
+# iStore 软件中心（luci-app-store + taskd/luci-lib-taskd/luci-lib-xterm；已适配 apk，分支 main）
+echo 'src-git istore https://github.com/linkease/istore;main' >> feeds.conf.default

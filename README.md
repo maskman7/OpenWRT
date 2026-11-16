@@ -104,6 +104,12 @@
 - 已在线 `apk add` 补装验证：`uhttpd`、`uhttpd-mod-ubus`、`uhttpd-mod-ucode`、`luci-mod-admin-full`、`luci-mod-network`、`luci-mod-status`、`luci-mod-system`、`luci-app-uhttpd`，补完 80 端口起、登录页与 vantage 主题正常、ubus 空密码登录成功、6 个插件读写 ACL 完整。
 - 处理：上述 8 个包已写入本地 `.config` 的「LuCI Web 基础」段，**重编后固化进固件**；在线补的包只在内存系统，断电即丢，不能替代重编。
 
+**第三轮固件实测：iStore（luci-app-store）未编入**
+- 现象：r38415 固件里 compat / 中文 / 删卡 / Docker 等均生效，但 `luci-app-store` 及其依赖链（`taskd`、`luci-lib-taskd`、`luci-lib-xterm`）缺失，在线源列表里也没有 istore feed。
+- 根因：`.config` 勾了 `luci-app-store=y`，但远端 `diy-part1.sh` 漏了 istore feed 行（只有 vantage/alist/mosdns）；feed 没接入，编译树里没有 store 包，`make defconfig` 把这条勾选静默清掉。
+- 处理：part1 补回 `src-git istore https://github.com/linkease/istore;main`；part2 末尾兜底 `./scripts/feeds install -p istore luci-app-store luci-lib-taskd taskd luci-lib-xterm`。重编后核对 world 含 store。
+- 教训：第三方 luci-app 必须**先在 part1 接对应 feed，再在 .config 勾选**；只勾 .config 不接 feed，包会被 defconfig 静默移除，且编译不一定报错。
+
 **首轮 initramfs 实测通过项（openwrt master r38384）**
 - 网络：`br-lan 192.168.18.254/24`，lan1 在线；WAN DHCP 拿到上级地址；QCA8075 四口全部识别。
 - 定制：主机名 `MaskMan7WRT`；默认主题 vantage（登录页已加载 vantage.css）。
@@ -128,4 +134,5 @@
 - [ ] 新固件出包后：U-Boot「uImage 启动」页启动新 `initramfs-uImage.itb` → 进系统确认 LuCI 面板/插件正常 → 上传 `squashfs-sysupgrade.bin` 执行系统内升级写 eMMC。
 - [ ] 固化后核对：默认 IP `192.168.18.254`、主机名 `MaskMan7WRT`、vantage 主题、Docker 与各插件开机自启。
 - [x] 本轮已加入：upnp、nlbwmon（流量监控）、ttyd（网页终端）、kmod-tun（TUN 模块）；zerotier 本体/面板后期手动安装。
+- [ ] 待重编验证：part1 补回 istore feed、part2 兜底显式 install store 链后，新固件 world 应含 `luci-app-store` / `luci-lib-taskd` / `taskd` / `luci-lib-xterm`。
 - [ ] 待定：代理最终选 OpenClash 还是 Passwall；是否再追加 watchcat/sqm/tailscale 等插件。
