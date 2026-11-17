@@ -48,6 +48,7 @@
 - 去广告：`adguardhome`、`luci-app-adguardhome`
 - SMB：`ksmbd-server`、`luci-app-ksmbd`
 - LuCI Web 基础（必须显式选，否则 80 无服务）：`uhttpd`、`uhttpd-mod-ubus`、`uhttpd-mod-ucode`、`luci-mod-admin-full`、`luci-mod-network`、`luci-mod-status`、`luci-mod-system`、`luci-app-uhttpd`
+- 网络协议面板：`luci-proto-ipv6`（DHCPv6/6in4/6to4/6rd/DS-Lite/IPIP6 界面）、`luci-proto-ppp`（PPP/PPPoE/PPtP 界面）；底层 `odhcp6c`、`ppp` 由系统默认拉入。缺 `luci-proto-ipv6` 时 wan6（proto=dhcpv6）接口页报"不支持的协议类型"。
 - 运维小工具：`luci-app-upnp`、`luci-app-nlbwmon`、`luci-app-ttyd`（本体 miniupnpd/nlbwmon/ttyd 由依赖自动拉取）
 - 软件包管理：**不**编入官方 `luci-app-package-manager` 面板，在线装包统一走 iStore 软件中心；命令行 `apk add <包名>` 同样可用（apk 本体、rpcd 后端与官方软件源默认内置）。
 - Lua 兼容层：`luci-compat`（提供旧版 `luci.cbi` 等 Lua CBI 模块；老式 Lua CBI 第三方面板缺它会报 `module 'luci.cbi' not found`。新 luci 默认只带 `luci-lua-runtime`，不含 CBI）。
@@ -109,6 +110,11 @@
 - 根因：`.config` 勾了 `luci-app-store=y`，但远端 `diy-part1.sh` 漏了 istore feed 行（只有 vantage/alist/mosdns）；feed 没接入，编译树里没有 store 包，`make defconfig` 把这条勾选静默清掉。
 - 处理：part1 补回 `src-git istore https://github.com/linkease/istore;main`；part2 末尾兜底 `./scripts/feeds install -p istore luci-app-store luci-lib-taskd taskd luci-lib-xterm`。重编后核对 world 含 store。
 - 教训：第三方 luci-app 必须**先在 part1 接对应 feed，再在 .config 勾选**；只勾 .config 不接 feed，包会被 defconfig 静默移除，且编译不一定报错。
+
+**第三轮固件实测：wan6 接口页报"不支持的协议类型"**
+- 现象：网络 → 接口，wan6（proto=dhcpv6，device=wan）显示"不支持的协议类型。安装扩展协议..."；wan（dhcp）正常。
+- 根因：底层 `odhcp6c` 已装、内核 IPv6 未禁用，但 **LuCI 协议面板包 `luci-proto-ipv6` 未编入**，界面不认识 dhcpv6；纯 ucode/JS 面板缺失，不影响底层 IPv6 协商。
+- 处理：`.config` 补 `luci-proto-ipv6=y`；另预留 `luci-proto-ppp=y`（PPPoE/PPtP 拨号界面，当前 wan 走 dhcp，`ppp-mod-pppoe` 本体已在系统内）。重编后界面可正常编辑 wan6。
 
 **首轮 initramfs 实测通过项（openwrt master r38384）**
 - 网络：`br-lan 192.168.18.254/24`，lan1 在线；WAN DHCP 拿到上级地址；QCA8075 四口全部识别。
