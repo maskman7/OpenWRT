@@ -61,5 +61,13 @@ return baseclass.extend({
 });
 FLOWEOF
 
-# 5. 显式把 iStore 及其依赖链链接进 package/feeds（兜底：install -a 对子目录 feed 可能漏装）
-./scripts/feeds install -p istore luci-app-store luci-lib-taskd taskd luci-lib-xterm || true
+# 5. iStore 链兜底链接：先刷新 istore feed 索引，再按官方 -d y 方式装主包（依赖自动拉入），
+#    随后显式链接 taskd/xterm/lib-taskd；末尾打印链接诊断，便于在 Actions 日志核对是否成功。
+echo "[part2] 刷新 istore feed 索引..."
+./scripts/feeds update istore || echo "[part2] WARN: feeds update istore 返回非零"
+./scripts/feeds install -d y -p istore luci-app-store || echo "[part2] WARN: install luci-app-store 返回非零"
+for p in luci-lib-taskd taskd luci-lib-xterm; do
+	./scripts/feeds install -p istore "$p" || echo "[part2] WARN: install $p 返回非零"
+done
+echo "[part2] package/feeds/istore 链接清单:"
+ls -l package/feeds/istore/ 2>/dev/null || echo "[part2] WARN: package/feeds/istore 目录不存在"

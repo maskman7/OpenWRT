@@ -63,7 +63,7 @@
 - 主题：`luci-theme-vantage`（anothaDev/luci-theme-vantage）
 - 网盘：`alist`、`luci-app-alist`（sbwml/luci-app-alist）
 - DNS：`mosdns`、`luci-app-mosdns`（sbwml/luci-app-mosdns）
-- 软件中心：`luci-app-store`（linkease/istore，iStore 一键装应用；后端 `taskd`、`luci-lib-taskd`、`luci-lib-xterm` 与 Lua 运行时 `luci-lua-runtime` 由依赖自动拉取；界面中文随主包内置，无独立 i18n 包；已适配 apk）
+- 软件中心：`luci-app-store`（linkease/istore，iStore 一键装应用；后端 `taskd`、`luci-lib-taskd`、`luci-lib-xterm` 与 Lua 运行时 `luci-lua-runtime` 及其运行依赖已在 `.config` 显式编入；界面中文随主包内置，无独立 i18n 包；已适配 apk）
 
 ### 暂缓：OpenClash
 - 官方源不带 OpenClash，第三方依赖杂、与新 luci 兼容性风险高，首版先在 `.config` 注释掉，保证基础固件先出包。
@@ -106,10 +106,11 @@
 - 已在线 `apk add` 补装验证：`uhttpd`、`uhttpd-mod-ubus`、`uhttpd-mod-ucode`、`luci-mod-admin-full`、`luci-mod-network`、`luci-mod-status`、`luci-mod-system`、`luci-app-uhttpd`，补完 80 端口起、登录页与 vantage 主题正常、ubus 空密码登录成功、6 个插件读写 ACL 完整。
 - 处理：上述 8 个包已写入本地 `.config` 的「LuCI Web 基础」段，**重编后固化进固件**；在线补的包只在内存系统，断电即丢，不能替代重编。
 
-**第三轮固件实测：iStore（luci-app-store）未编入**
-- 现象：r38415 固件里 compat / 中文 / 删卡 / Docker 等均生效，但 `luci-app-store` 及其依赖链（`taskd`、`luci-lib-taskd`、`luci-lib-xterm`）缺失，在线源列表里也没有 istore feed。
-- 根因：`.config` 勾了 `luci-app-store=y`，但远端 `diy-part1.sh` 漏了 istore feed 行（只有 vantage/alist/mosdns）；feed 没接入，编译树里没有 store 包，`make defconfig` 把这条勾选静默清掉。
-- 处理：part1 补回 `src-git istore https://github.com/linkease/istore;main`；part2 末尾兜底 `./scripts/feeds install -p istore luci-app-store luci-lib-taskd taskd luci-lib-xterm`。重编后核对 world 含 store。
+**iStore（luci-app-store）未编入，build-9 复核与加固**
+- 现象：build-9（run 44025902005，success）manifest/config.buildinfo 里 `luci-app-store`、`luci-lib-taskd`、`taskd`、`luci-lib-xterm` 及依赖（tar/libuci-lua/mount-utils/script-utils/coreutils/coreutils-stty）仍全部为 0；其它第三方 feed（vantage/alist/mosdns）均正常编入。
+- 已排除：part1 feed 行在；part2 兜底 install 在；`.config` 勾选格式正确；workflow 顺序正确（part1→update→install -a→part2→defconfig）；`feeds.buildinfo` 记录 `istore@a97ace34`，feed 克隆成功；四包 Makefile 包名正确、前端 tag v0.2.0-2 可达；master 快照依赖 apk 均存在；本地骨架复现 Makefile DUMP 解析正常、scan 生成的 `.packageinfo` 四包齐全。
+- 剩余疑点：编译机 `feeds install` 链接或 `make defconfig` 依赖剔除环节静默跳过；匿名下载 Actions 日志被 403（需仓库 admin），未能取到 Update/Install feeds 步骤原文报错。
+- 本轮加固：① `.config` 显式勾选整条链（store/luci-lib-taskd/taskd/luci-lib-xterm）与直接依赖（tar/libuci-lua/mount-utils/script-utils/coreutils/coreutils-stty），不再只靠 defconfig 自动补依赖；② part2 兜底改为先 `feeds update istore` 刷新索引，再按官方 `-d y -p istore luci-app-store` 装主包，逐项链接 taskd/xterm/lib-taskd，并在日志打印 `package/feeds/istore` 链接清单便于核对；未再用 `|| true` 吞掉关键告警。
 - 教训：第三方 luci-app 必须**先在 part1 接对应 feed，再在 .config 勾选**；只勾 .config 不接 feed，包会被 defconfig 静默移除，且编译不一定报错。
 
 **第三轮固件实测：wan6 接口页报"不支持的协议类型"**
@@ -141,6 +142,6 @@
 - [ ] 新固件出包后：U-Boot「uImage 启动」页启动新 `initramfs-uImage.itb` → 进系统确认 LuCI 面板/插件正常 → 上传 `squashfs-sysupgrade.bin` 执行系统内升级写 eMMC。
 - [ ] 固化后核对：默认 IP `192.168.18.254`、主机名 `MaskMan7WRT`、vantage 主题、Docker 与各插件开机自启。
 - [x] 本轮已加入：upnp、nlbwmon（流量监控）、ttyd（网页终端）、kmod-tun（TUN 模块）；zerotier 本体/面板后期手动安装。
-- [ ] 待重编验证：part1 补回 istore feed、part2 兜底显式 install store 链后，新固件 world 应含 `luci-app-store` / `luci-lib-taskd` / `taskd` / `luci-lib-xterm`。
+- [ ] 待重编验证：`.config` 显式全链勾选 + part2 刷新索引/诊断后，新固件 world 应含 `luci-app-store` / `luci-lib-taskd` / `taskd` / `luci-lib-xterm` 及依赖；若仍缺，按 part2 日志里 `package/feeds/istore` 链接清单与 Update/Install feeds 步骤原文报错继续定位。
 - [x] Packet path 流程图已移植到概览顶端（内存系统实测通过）；part2 已内联 `15_flow.js`，重编后随固件固化。
 - [ ] 待定：代理最终选 OpenClash 还是 Passwall；是否再追加 watchcat/sqm/tailscale 等插件。
