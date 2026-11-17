@@ -61,13 +61,6 @@ return baseclass.extend({
 });
 FLOWEOF
 
-# 5. iStore 链兜底链接：先刷新 istore feed 索引，再按官方 -d y 方式装主包（依赖自动拉入），
-#    随后显式链接 taskd/xterm/lib-taskd；末尾打印链接诊断，便于在 Actions 日志核对是否成功。
-echo "[part2] 刷新 istore feed 索引..."
-./scripts/feeds update istore || echo "[part2] WARN: feeds update istore 返回非零"
-./scripts/feeds install -d y -p istore luci-app-store || echo "[part2] WARN: install luci-app-store 返回非零"
-for p in luci-lib-taskd taskd luci-lib-xterm; do
-	./scripts/feeds install -p istore "$p" || echo "[part2] WARN: install $p 返回非零"
-done
-echo "[part2] package/feeds/istore 链接清单:"
-ls -l package/feeds/istore/ 2>/dev/null || echo "[part2] WARN: package/feeds/istore 目录不存在"
+# 5. iStore 链兜底链接已移除：方案弃用，图形化装包改用官方 luci-app-package-manager
+#    （随官方 luci feed，feeds install -a 自动链接，无需此处兜底）。
+#    原逻辑：feeds update istore → feeds install -d y -p istore luci-app-store → 链接 taskd/xterm/lib-taskd。

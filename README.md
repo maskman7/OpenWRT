@@ -51,9 +51,9 @@
 - LuCI Web 基础（必须显式选，否则 80 无服务）：`uhttpd`、`uhttpd-mod-ubus`、`uhttpd-mod-ucode`、`luci-mod-admin-full`、`luci-mod-network`、`luci-mod-status`、`luci-mod-system`、`luci-app-uhttpd`
 - 网络协议面板：`luci-proto-ipv6`（DHCPv6/6in4/6to4/6rd/DS-Lite/IPIP6 界面）、`luci-proto-ppp`（PPP/PPPoE/PPtP 界面）；底层 `odhcp6c`、`ppp` 由系统默认拉入。缺 `luci-proto-ipv6` 时 wan6（proto=dhcpv6）接口页报"不支持的协议类型"。
 - 运维小工具：`luci-app-upnp`、`luci-app-nlbwmon`、`luci-app-ttyd`（本体 miniupnpd/nlbwmon/ttyd 由依赖自动拉取）
-- 软件包管理：**不**编入官方 `luci-app-package-manager` 面板，在线装包统一走 iStore 软件中心；命令行 `apk add <包名>` 同样可用（apk 本体、rpcd 后端与官方软件源默认内置）。
+- 软件包管理：编入官方 `luci-app-package-manager`（菜单位置 系统 → 软件包/Software；后端已适配 apk，检测到 `/usr/bin/apk` 走 `apk query/add/del`，自带简体中文）；命令行 `apk add <包名>` 同样可用（apk 本体、rpcd 后端与官方软件源默认内置）。
 - Lua 兼容层：`luci-compat`（提供旧版 `luci.cbi` 等 Lua CBI 模块；老式 Lua CBI 第三方面板缺它会报 `module 'luci.cbi' not found`。新 luci 默认只带 `luci-lua-runtime`，不含 CBI）。
-- 组网：`kmod-tun`（TUN 内核模块，与内核同树编译，提供 `/dev/net/tun`）；`zerotier` 本体与面板不预置，后期在 iStore / `apk add zerotier` 手动安装。
+- 组网：`kmod-tun`（TUN 内核模块，与内核同树编译，提供 `/dev/net/tun`）；`zerotier` 本体与面板不预置，后期在官方软件包面板或 `apk add zerotier` 手动安装。
 - 中文界面：`.config` 用翻译开关 `CONFIG_LUCI_LANG_zh_Hans=y`（luci-base → Translations → 简体中文）。打开后 luci.mk 自动把所有已选主包的 `luci-i18n-*-zh-cn` 翻译包纳入；**不要**逐个手写 `CONFIG_PACKAGE_luci-i18n-*-zh-cn=y`——这些是 HIDDEN 包，会被 `make defconfig` 按默认逻辑清掉。
 - 基础：`curl`、`ca-certificates`、`luci-app-ddns`
 
@@ -63,7 +63,7 @@
 - 主题：`luci-theme-vantage`（anothaDev/luci-theme-vantage）
 - 网盘：`alist`、`luci-app-alist`（sbwml/luci-app-alist）
 - DNS：`mosdns`、`luci-app-mosdns`（sbwml/luci-app-mosdns）
-- 软件中心：`luci-app-store`（linkease/istore，iStore 一键装应用；后端 `taskd`、`luci-lib-taskd`、`luci-lib-xterm` 与 Lua 运行时 `luci-lua-runtime` 及其运行依赖已在 `.config` 显式编入；界面中文随主包内置，无独立 i18n 包；已适配 apk）
+- 软件包面板：官方 `luci-app-package-manager`（随官方 luci feed，非第三方源）。原计划的 iStore `luci-app-store` 已弃用，见下文排错记录。
 
 ### 暂缓：OpenClash
 - 官方源不带 OpenClash，第三方依赖杂、与新 luci 兼容性风险高，首版先在 `.config` 注释掉，保证基础固件先出包。
@@ -71,7 +71,7 @@
 
 ### ZeroTier（后期手动安装，不预置进固件）
 - 固件只带 `kmod-tun`（TUN 内核模块，同树编译）；`zerotier` 本体与面板不在固件内。
-- 需要时在 iStore 软件中心搜装，或命令行 `apk add zerotier`；装完 `/etc/init.d/zerotier enable && /etc/init.d/zerotier start`。
+- 需要时在官方软件包面板搜装，或命令行 `apk add zerotier`；装完 `/etc/init.d/zerotier enable && /etc/init.d/zerotier start`。
 - 之后执行 `zerotier-cli join <你的网络ID>`，再登录 my.zerotier.com 后台给本机设备授权；`zerotier-cli status` 看在线状态、`zerotier-cli peers` 看对端。
 - 要打通局域网 ↔ ZeroTier 虚拟网：防火墙里把 zt 虚拟网卡加入 LAN 覆盖设备，并按需加转发规则。
 - 官方源无图形面板；第三方 Lua CBI 面板需配合已编入的 `luci-compat`，兼容性以固化后实测为准。
@@ -84,8 +84,8 @@
 3. **DNS 端口不冲突**：AdGuardHome 与 mosdns 都管 DNS，装完错开端口、明确分工，避免抢占 53。
 4. **电脑网卡同网段**：默认 IP 改为 `192.168.18.254`，进后台前把电脑网卡设为 `192.168.18.2/24`。
 5. **刷机两步走，别在 U-Boot 直刷 sysupgrade.bin**：先在 U-Boot「uImage 启动」页用 `initramfs-uImage.itb` 内存启动 → 进 OpenWrt 后，再用 LuCI 或 `sysupgrade -v` 刷 `squashfs-sysupgrade.bin` 写 eMMC。`sysupgrade.bin` 是 legacy 升级格式，不能在 U-Boot 直刷（上次半砖即由此导致）。
-6. **后期在线装包的限制（snapshot）**：用户态服务/面板/库（daemon、`luci-app-*`、lib）可在 iStore 软件中心或 `apk add <包名>` 直接装；但带内核模块的包（`kmod-*`）必须与当前内核版本严格匹配，snapshot 内核滚动更新后在线 kmod 可能装不上或版本不符——这类需求最好在编译阶段就写进 `.config` 同树编译。第三方 feed（alist/mosdns/vantage）写入固件的是编译时快照地址，snapshot 滚动后其在线源可能 404；官方 base/packages/luci/routing/telephony/video 源不受影响。
-7. **iStore 软件中心兼容性**：`luci-app-store` 是 Lua 面板，经 `luci-lua-runtime` 在新 luci 下运行；内存系统在线安装时依赖全部拉齐、控制器/视图/中文/自启就位，但 Lua 页面在新 JS 侧边栏的实际渲染需固化后浏览器核对。商店内第三方应用面向多平台打包，官方 README 自陈"商店里的插件不一定都能在本固件装上"，其依赖与 snapshot apk/新 luci 的兼容性需逐个实测；装不上的应用仍可走官方源 `apk add` 或编译阶段纳入 `.config`。
+6. **后期在线装包的限制（snapshot）**：用户态服务/面板/库（daemon、`luci-app-*`、lib）可在官方软件包面板或 `apk add <包名>` 直接装；但带内核模块的包（`kmod-*`）必须与当前内核版本严格匹配，snapshot 内核滚动更新后在线 kmod 可能装不上或版本不符——这类需求最好在编译阶段就写进 `.config` 同树编译。第三方 feed（alist/mosdns/vantage）写入固件的是编译时快照地址，snapshot 滚动后其在线源可能 404；官方 base/packages/luci/routing/telephony/video 源不受影响。
+7. **iStore 方案已弃用**：`luci-app-store` 依赖 GNU `tar`，当前 master apk 构建下 GNU tar 未被 `make defconfig` 选中（snapshot 二进制仓库也无 `tar.apk`，仅 `bsdtar`），store 主包连同 `tar` 被 defconfig 剔除；同 feed 的 `taskd`/`luci-lib-taskd`/`luci-lib-xterm` 虽能编入，但缺主面板后端空转。故改用官方 `luci-app-package-manager` 承担图形化装包；`luci-compat`、`luci-lua-runtime` 仍保留，供后期老式 Lua 面板兜底。
 8. **老式 Lua CBI 面板需 `luci-compat`**：新 luci 默认只带 `luci-lua-runtime`，不含旧版 `luci.cbi`；第三方老式 Lua 面板（如 zerotier 面板）若 `require("luci.cbi")`，缺 `luci-compat` 会报 `module 'luci.cbi' not found`。本固件已编入 `luci-compat` 兜底；但个别更老面板还可能依赖已被 master 移除的其他 Lua 模块，仍可能报错，以固化后实测为准。
 9. **Packet path 流程图已挂到概览顶端**：vantage `nftflow` 原本只在 状态 → Nftables 页由 `menu-vantage.js` 按 `data-page==='admin-status-nftables'` 拦截挂载。源码复核其 `draw()` 主体由 `nft --json list ruleset` 数据独立生成，不依赖 Nftables 页规则卡；耦合点仅入口页面判断与 `.nft-table` 锚点。方案：概览 `include/15_flow.js` 注册一张卡片，先放 `.nft-table` 占位（CSS 默认 `display:none`，无空框残留），再 `L.require('vantage-theme.nftflow').attach(#view)`；卡片仅首次 render 返回占位，概览轮询重建 DOM 时返回 `null` 保留已画流程图。已在内存系统实测：流程图在概览顶端、轮询不丢、无重复挂载。规则表模式下规则步骤条件对齐依赖 Nftables 页原始规则行，概览会略简，默认"流向"模式完整。
 
@@ -106,11 +106,11 @@
 - 已在线 `apk add` 补装验证：`uhttpd`、`uhttpd-mod-ubus`、`uhttpd-mod-ucode`、`luci-mod-admin-full`、`luci-mod-network`、`luci-mod-status`、`luci-mod-system`、`luci-app-uhttpd`，补完 80 端口起、登录页与 vantage 主题正常、ubus 空密码登录成功、6 个插件读写 ACL 完整。
 - 处理：上述 8 个包已写入本地 `.config` 的「LuCI Web 基础」段，**重编后固化进固件**；在线补的包只在内存系统，断电即丢，不能替代重编。
 
-**iStore（luci-app-store）未编入，build-9 复核与加固**
-- 现象：build-9（run 44025902005，success）manifest/config.buildinfo 里 `luci-app-store`、`luci-lib-taskd`、`taskd`、`luci-lib-xterm` 及依赖（tar/libuci-lua/mount-utils/script-utils/coreutils/coreutils-stty）仍全部为 0；其它第三方 feed（vantage/alist/mosdns）均正常编入。
-- 已排除：part1 feed 行在；part2 兜底 install 在；`.config` 勾选格式正确；workflow 顺序正确（part1→update→install -a→part2→defconfig）；`feeds.buildinfo` 记录 `istore@a97ace34`，feed 克隆成功；四包 Makefile 包名正确、前端 tag v0.2.0-2 可达；master 快照依赖 apk 均存在；本地骨架复现 Makefile DUMP 解析正常、scan 生成的 `.packageinfo` 四包齐全。
-- 剩余疑点：编译机 `feeds install` 链接或 `make defconfig` 依赖剔除环节静默跳过；匿名下载 Actions 日志被 403（需仓库 admin），未能取到 Update/Install feeds 步骤原文报错。
-- 本轮加固：① `.config` 显式勾选整条链（store/luci-lib-taskd/taskd/luci-lib-xterm）与直接依赖（tar/libuci-lua/mount-utils/script-utils/coreutils/coreutils-stty），不再只靠 defconfig 自动补依赖；② part2 兜底改为先 `feeds update istore` 刷新索引，再按官方 `-d y -p istore luci-app-store` 装主包，逐项链接 taskd/xterm/lib-taskd，并在日志打印 `package/feeds/istore` 链接清单便于核对；未再用 `|| true` 吞掉关键告警。
+**iStore（luci-app-store）未编入，最终弃用并改用官方 package-manager**
+- build-9（run 44025902005，success）复核：`luci-app-store`、`luci-lib-taskd`、`taskd`、`luci-lib-xterm` 及依赖在 manifest/config.buildinfo 全部为 0；其它第三方 feed（vantage/alist/mosdns）均正常编入。
+- build-10（run 44040250337，success，266 包）复核：加固后 `luci-lib-taskd`、`taskd`、`luci-lib-xterm` 及 libuci-lua/mount-utils/script-utils/coreutils/coreutils-stty/luci-lua-runtime/luci-compat 均进 world；但 **`luci-app-store` 与 `tar` 仍被 defconfig 剔除**。
+- 根因方向：store 的 `LUCI_DEPENDS` 写死 `+tar`（GNU tar）；当前 master apk 构建下 GNU tar 未被 defconfig 选中（snapshot 二进制仓库 packages/base 目录均无 `tar.apk`，仅 `bsdtar`），依赖不可满足导致 store 连带被剔；tar 本体同样未进。store 脚本仅做 `tar -czf/-zxf` 打解 gzip，busybox tar 可替代。
+- 决定：不再追 iStore。图形化装包改用官方 `luci-app-package-manager`（依赖仅 `+luci-base`，后端 `package-manager-call` 已适配 apk，自带 zh_Hans）；part1 注释 istore 源、part2 移除 istore 兜底段，`.config` 取消 store/taskd/xterm/tar 勾选，保留 `luci-compat`、`luci-lua-runtime` 作 Lua 面板兜底。
 - 教训：第三方 luci-app 必须**先在 part1 接对应 feed，再在 .config 勾选**；只勾 .config 不接 feed，包会被 defconfig 静默移除，且编译不一定报错。
 
 **第三轮固件实测：wan6 接口页报"不支持的协议类型"**
@@ -142,6 +142,6 @@
 - [ ] 新固件出包后：U-Boot「uImage 启动」页启动新 `initramfs-uImage.itb` → 进系统确认 LuCI 面板/插件正常 → 上传 `squashfs-sysupgrade.bin` 执行系统内升级写 eMMC。
 - [ ] 固化后核对：默认 IP `192.168.18.254`、主机名 `MaskMan7WRT`、vantage 主题、Docker 与各插件开机自启。
 - [x] 本轮已加入：upnp、nlbwmon（流量监控）、ttyd（网页终端）、kmod-tun（TUN 模块）；zerotier 本体/面板后期手动安装。
-- [ ] 待重编验证：`.config` 显式全链勾选 + part2 刷新索引/诊断后，新固件 world 应含 `luci-app-store` / `luci-lib-taskd` / `taskd` / `luci-lib-xterm` 及依赖；若仍缺，按 part2 日志里 `package/feeds/istore` 链接清单与 Update/Install feeds 步骤原文报错继续定位。
+- [ ] 待重编验证：新固件 world 应含官方 `luci-app-package-manager`（及对应 `luci-i18n-package-manager-zh-cn`）；内存启动后 系统 → 软件包 面板可列出已装/可装包、可在线 apk add/del。iStore 链（store/taskd/xterm/tar）不再编入。
 - [x] Packet path 流程图已移植到概览顶端（内存系统实测通过）；part2 已内联 `15_flow.js`，重编后随固件固化。
 - [ ] 待定：代理最终选 OpenClash 还是 Passwall；是否再追加 watchcat/sqm/tailscale 等插件。
