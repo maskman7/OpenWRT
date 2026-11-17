@@ -17,6 +17,18 @@ uci -q commit luci
 EOF
 chmod +x package/base-files/files/etc/uci-defaults/99-default-theme
 
+# 3b. Docker 加速器（首启写入 dockerd uci；国内直连 Docker Hub 超时，需走镜像源）
+cat > package/base-files/files/etc/uci-defaults/99-docker-mirror <<'EOF'
+#!/bin/sh
+[ -f /etc/config/dockerd ] || exit 0
+uci -q delete dockerd.globals.registry_mirrors
+uci -q add_list dockerd.globals.registry_mirrors='https://docker.m.daocloud.io'
+uci -q add_list dockerd.globals.registry_mirrors='https://docker.1ms.run'
+uci -q commit dockerd
+exit 0
+EOF
+chmod +x package/base-files/files/etc/uci-defaults/99-docker-mirror
+
 # 4. 概览页移除"系统信息"卡片（10_system.js）
 STATUS_INC="feeds/luci/modules/luci-mod-status/htdocs/luci-static/resources/view/status/include"
 rm -f "$STATUS_INC/10_system.js"

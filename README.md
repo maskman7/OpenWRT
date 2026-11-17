@@ -45,6 +45,7 @@
 
 ### 官方源（编译最稳，已核实 openwrt snapshots 存在）
 - Docker：`docker`、`dockerd`、`containerd`、`runc`、`luci-app-dockerman`
+- Docker 加速器：首启由 uci-defaults `99-docker-mirror` 写入 `dockerd.globals.registry_mirrors`（`docker.m.daocloud.io`、`docker.1ms.run`）；国内直连 Docker Hub 超时，必须走镜像源。镜像须为 `linux/arm64`（本机 aarch64）。
 - 去广告：`adguardhome`、`luci-app-adguardhome`
 - SMB：`ksmbd-server`、`luci-app-ksmbd`
 - LuCI Web 基础（必须显式选，否则 80 无服务）：`uhttpd`、`uhttpd-mod-ubus`、`uhttpd-mod-ucode`、`luci-mod-admin-full`、`luci-mod-network`、`luci-mod-status`、`luci-mod-system`、`luci-app-uhttpd`
@@ -119,7 +120,7 @@
 **首轮 initramfs 实测通过项（openwrt master r38384）**
 - 网络：`br-lan 192.168.18.254/24`，lan1 在线；WAN DHCP 拿到上级地址；QCA8075 四口全部识别。
 - 定制：主机名 `MaskMan7WRT`；默认主题 vantage（登录页已加载 vantage.css）。
-- Docker：dockerd/containerd/runc 29.6.1 运行中，overlayfs + cgroup v2，`S99dockerd` 开机自启。
+- Docker：dockerd/containerd/runc 29.6.1 运行中，overlayfs + cgroup v2，`S99dockerd` 开机自启。实测直连 `registry-1.docker.io` 超时；配 daocloud / 1ms.run 加速器后裸名 `docker pull alpine:latest` 成功（arm64/linux，4.28MB），容器可正常 run/exec。
 - 插件服务：AdGuardHome(3000)、mosdns、ksmbd(445)、alist、ddns、ttyd(7681)、wsdd2 均在；对应 luci-app 已注册菜单。
 - 备注：该 snapshot 已用 **apk**（无 opkg）。中文 i18n 包已在重编 `.config` 内；首轮内存系统 WAN 联网后在线补装 7 个 zh-cn 包验证通过，登录页返回"用户名/密码/登录"，固化后随固件永久生效。
 
