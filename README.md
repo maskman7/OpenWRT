@@ -53,7 +53,7 @@
 - 运维小工具：`luci-app-upnp`、`luci-app-nlbwmon`、`luci-app-ttyd`（本体 miniupnpd/nlbwmon/ttyd 由依赖自动拉取）
 - 软件包管理：编入官方 `luci-app-package-manager`（菜单位置 系统 → 软件包/Software；后端已适配 apk，检测到 `/usr/bin/apk` 走 `apk query/add/del`，自带简体中文）；命令行 `apk add <包名>` 同样可用（apk 本体、rpcd 后端与官方软件源默认内置）。
 - Lua 兼容层：`luci-compat`（提供旧版 `luci.cbi` 等 Lua CBI 模块；老式 Lua CBI 第三方面板缺它会报 `module 'luci.cbi' not found`。新 luci 默认只带 `luci-lua-runtime`，不含 CBI）。
-- 组网：`kmod-tun`（TUN 内核模块，与内核同树编译，提供 `/dev/net/tun`）；`zerotier` 本体与面板不预置，后期在官方软件包面板或 `apk add zerotier` 手动安装。
+- 组网：`kmod-tun`（TUN 内核模块，与内核同树编译，提供 `/dev/net/tun`）+ `zerotier` 客户端本体（官方 packages feed；依赖的 libstdcpp/libminiupnpc/libnatpmp/libatomic 由编译自动拉取）。官方 luci feed 无图形面板，用 `zerotier-cli` 命令行管理。
 - 中文界面：`.config` 用翻译开关 `CONFIG_LUCI_LANG_zh_Hans=y`（luci-base → Translations → 简体中文）。打开后 luci.mk 自动把所有已选主包的 `luci-i18n-*-zh-cn` 翻译包纳入；**不要**逐个手写 `CONFIG_PACKAGE_luci-i18n-*-zh-cn=y`——这些是 HIDDEN 包，会被 `make defconfig` 按默认逻辑清掉。
 - 基础：`curl`、`ca-certificates`、`luci-app-ddns`
 
@@ -69,10 +69,10 @@
 - 官方源不带 OpenClash，第三方依赖杂、与新 luci 兼容性风险高，首版先在 `.config` 注释掉，保证基础固件先出包。
 - 加回：part1 追加 `src-git openclash https://github.com/vernesong/OpenClash`，再取消 `.config` 里 `# CONFIG_PACKAGE_luci-app-openclash=y` 的注释。
 
-### ZeroTier（后期手动安装，不预置进固件）
-- 固件只带 `kmod-tun`（TUN 内核模块，同树编译）；`zerotier` 本体与面板不在固件内。
-- 需要时在官方软件包面板搜装，或命令行 `apk add zerotier`；装完 `/etc/init.d/zerotier enable && /etc/init.d/zerotier start`。
-- 之后执行 `zerotier-cli join <你的网络ID>`，再登录 my.zerotier.com 后台给本机设备授权；`zerotier-cli status` 看在线状态、`zerotier-cli peers` 看对端。
+### ZeroTier（已编入固件）
+- 固件已带 `kmod-tun`（TUN 内核模块，同树编译）与 `zerotier` 客户端本体；依赖的用户态库编译时自动拉取。
+- 首次使用：`/etc/init.d/zerotier enable && /etc/init.d/zerotier start`；`zerotier-cli info` 返回 `200 OK` + 16 位节点地址即正常。
+- 执行 `zerotier-cli join <你的网络ID>`，再登录 my.zerotier.com 后台给本机设备授权；`zerotier-cli status` 看在线状态、`zerotier-cli peers` 看对端。
 - 要打通局域网 ↔ ZeroTier 虚拟网：防火墙里把 zt 虚拟网卡加入 LAN 覆盖设备，并按需加转发规则。
 - 官方源无图形面板；第三方 Lua CBI 面板需配合已编入的 `luci-compat`，兼容性以固化后实测为准。
 - 不建议改在 dockerman 容器里跑：ZeroTier 需 TUN，容器方式仍要宿主先有 kmod-tun，还要挂 `/dev/net/tun`、加 `NET_ADMIN`，组网转发更绕。
@@ -133,7 +133,7 @@
 - `luci-app-sqm`：带宽 QoS 调度
 - `luci-app-tailscale`：异地内网穿透（替代/补充 ZeroTier）
 
-> upnp / nlbwmon / ttyd / kmod-tun 已在本轮正式加入 `.config`；zerotier 本体与面板后期手动安装。
+> upnp / nlbwmon / ttyd / kmod-tun / zerotier 已在 `.config` 编入；zerotier 官方无 luci 图形面板，用 `zerotier-cli` 命令行管理。
 
 ## 七、待办
 
@@ -141,7 +141,7 @@
 - [ ] 把补了 Web 基础包的新 `.config` 提交到 GitHub，重新触发 Action 编译。
 - [ ] 新固件出包后：U-Boot「uImage 启动」页启动新 `initramfs-uImage.itb` → 进系统确认 LuCI 面板/插件正常 → 上传 `squashfs-sysupgrade.bin` 执行系统内升级写 eMMC。
 - [ ] 固化后核对：默认 IP `192.168.18.254`、主机名 `MaskMan7WRT`、vantage 主题、Docker 与各插件开机自启。
-- [x] 本轮已加入：upnp、nlbwmon（流量监控）、ttyd（网页终端）、kmod-tun（TUN 模块）；zerotier 本体/面板后期手动安装。
-- [ ] 待重编验证：新固件 world 应含官方 `luci-app-package-manager`（及对应 `luci-i18n-package-manager-zh-cn`）；内存启动后 系统 → 软件包 面板可列出已装/可装包、可在线 apk add/del。iStore 链（store/taskd/xterm/tar）不再编入。
+- [x] 本轮已加入：upnp、nlbwmon（流量监控）、ttyd（网页终端）、kmod-tun（TUN 模块）、zerotier 客户端本体；zerotier 官方无 luci 面板，命令行管理。
+- [ ] 待重编验证：新固件 world 应含官方 `luci-app-package-manager`（及对应 `luci-i18n-package-manager-zh-cn`）与 `zerotier`（含 libstdcpp/libminiupnpc/libnatpmp/libatomic 依赖）；内存启动后 系统 → 软件包 面板可列出已装/可装包、可在线 apk add/del，`zerotier-cli info` 正常。iStore 链（store/taskd/xterm/tar）不再编入。
 - [x] Packet path 流程图已移植到概览顶端（内存系统实测通过）；part2 已内联 `15_flow.js`，重编后随固件固化。
 - [ ] 待定：代理最终选 OpenClash 还是 Passwall；是否再追加 watchcat/sqm/tailscale 等插件。
