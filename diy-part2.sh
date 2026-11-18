@@ -84,7 +84,9 @@ STORE_MK="$(find feeds package/feeds -path '*luci-app-store/Makefile' 2>/dev/nul
 if [ -n "$STORE_MK" ]; then
 	sed -i 's/ +tar//' "$STORE_MK"
 	echo "[part2] store Makefile 去 tar 依赖: $STORE_MK"
-	grep '^LUCI_DEPENDS=' "$STORE_MK"
+	# 注意：Makefile 赋值是 LUCI_DEPENDS:=（:=），正则勿写成 LUCI_DEPENDS=；
+	# 诊断 grep 加 || true，避免在 bash -e(errexit) 下无匹配返回 1 终止整个 part2。
+	grep '^LUCI_DEPENDS' "$STORE_MK" || true
 else
 	echo "[part2] 警告: 未找到 luci-app-store/Makefile，istore feed 可能未拉取，store 将不编入。"
 fi
