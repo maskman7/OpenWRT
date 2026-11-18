@@ -53,7 +53,7 @@
 - 运维小工具：`luci-app-upnp`、`luci-app-nlbwmon`、`luci-app-ttyd`（本体 miniupnpd/nlbwmon/ttyd 由依赖自动拉取）
 - 软件包管理：编入官方 `luci-app-package-manager`（菜单位置 系统 → 软件包/Software；后端已适配 apk，检测到 `/usr/bin/apk` 走 `apk query/add/del`，自带简体中文）；命令行 `apk add <包名>` 同样可用（apk 本体、rpcd 后端与官方软件源默认内置）。
 - Lua 兼容层：`luci-compat`（提供旧版 `luci.cbi` 等 Lua CBI 模块；老式 Lua CBI 第三方面板缺它会报 `module 'luci.cbi' not found`。新 luci 默认只带 `luci-lua-runtime`，不含 CBI）。
-- 组网：`kmod-tun`（TUN 内核模块，与内核同树编译，提供 `/dev/net/tun`）+ `zerotier` 客户端本体（官方 packages feed；依赖的 libstdcpp/libminiupnpc/libnatpmp/libatomic 由编译自动拉取）。官方 luci feed 无图形面板，用 `zerotier-cli` 命令行管理。
+- 组网：`kmod-tun`（TUN 内核模块，与内核同树编译，提供 `/dev/net/tun`）+ `zerotier` 客户端本体（官方 packages feed；依赖的 libstdcpp/libminiupnpc/libnatpmp/libatomic 由编译自动拉取）。自适配 Lua 面板随 `files/` 内置（VPN→ZeroTier），命令行 `zerotier-cli` 备用。
 - 中文界面：`.config` 用翻译开关 `CONFIG_LUCI_LANG_zh_Hans=y`（luci-base → Translations → 简体中文）。打开后 luci.mk 自动把所有已选主包的 `luci-i18n-*-zh-cn` 翻译包纳入；**不要**逐个手写 `CONFIG_PACKAGE_luci-i18n-*-zh-cn=y`——这些是 HIDDEN 包，会被 `make defconfig` 按默认逻辑清掉。
 - 基础：`curl`、`ca-certificates`、`luci-app-ddns`
 
@@ -63,7 +63,7 @@
 - 主题：`luci-theme-vantage`（anothaDev/luci-theme-vantage）
 - 网盘：`alist`、`luci-app-alist`（sbwml/luci-app-alist）
 - DNS：`mosdns`、`luci-app-mosdns`（sbwml/luci-app-mosdns）
-- 软件包面板：官方 `luci-app-package-manager`（随官方 luci feed，非第三方源）。原计划的 iStore `luci-app-store` 已弃用，见下文排错记录。
+- 软件包面板：官方 `luci-app-package-manager`（随官方 luci feed，非第三方源）作兜底；另接第三方 iStore `luci-app-store`（B 方案，见下文排错记录）。
 
 ### 暂缓：OpenClash
 - 官方源不带 OpenClash，第三方依赖杂、与新 luci 兼容性风险高，首版先在 `.config` 注释掉，保证基础固件先出包。
@@ -72,9 +72,9 @@
 ### ZeroTier（已编入固件）
 - 固件已带 `kmod-tun`（TUN 内核模块，同树编译）与 `zerotier` 客户端本体；依赖的用户态库编译时自动拉取。
 - 首次使用：`/etc/init.d/zerotier enable && /etc/init.d/zerotier start`；`zerotier-cli info` 返回 `200 OK` + 16 位节点地址即正常。
-- 执行 `zerotier-cli join <你的网络ID>`，再登录 my.zerotier.com 后台给本机设备授权；`zerotier-cli status` 看在线状态、`zerotier-cli peers` 看对端。
+- 执行 `zerotier-cli join <你的网络ID>`，或在面板 **VPN → ZeroTier → 设置** 填 Network ID；再登录 my.zerotier.com 后台给本机设备授权。**状态** 页只读展示 `info / listnetworks / peers`。
 - 要打通局域网 ↔ ZeroTier 虚拟网：防火墙里把 zt 虚拟网卡加入 LAN 覆盖设备，并按需加转发规则。
-- 官方源无图形面板；第三方 Lua CBI 面板需配合已编入的 `luci-compat`，兼容性以固化后实测为准。
+- 图形面板为自适配 Lua CBI（源码在仓库 `files/usr/lib/lua/luci/...`，随 rootfs 内置），读写官方 `global`/`network` UCI 结构；依赖已编入的 `luci-compat`、`luci-lua-runtime`。命令行 `zerotier-cli` 仍可备用。
 - 不建议改在 dockerman 容器里跑：ZeroTier 需 TUN，容器方式仍要宿主先有 kmod-tun，还要挂 `/dev/net/tun`、加 `NET_ADMIN`，组网转发更绕。
 
 ## 五、风险与注意事项
@@ -84,8 +84,8 @@
 3. **DNS 端口不冲突**：AdGuardHome 与 mosdns 都管 DNS，装完错开端口、明确分工，避免抢占 53。
 4. **电脑网卡同网段**：默认 IP 改为 `192.168.18.254`，进后台前把电脑网卡设为 `192.168.18.2/24`。
 5. **刷机两步走，别在 U-Boot 直刷 sysupgrade.bin**：先在 U-Boot「uImage 启动」页用 `initramfs-uImage.itb` 内存启动 → 进 OpenWrt 后，再用 LuCI 或 `sysupgrade -v` 刷 `squashfs-sysupgrade.bin` 写 eMMC。`sysupgrade.bin` 是 legacy 升级格式，不能在 U-Boot 直刷（上次半砖即由此导致）。
-6. **后期在线装包的限制（snapshot）**：用户态服务/面板/库（daemon、`luci-app-*`、lib）可在官方软件包面板或 `apk add <包名>` 直接装；但带内核模块的包（`kmod-*`）必须与当前内核版本严格匹配，snapshot 内核滚动更新后在线 kmod 可能装不上或版本不符——这类需求最好在编译阶段就写进 `.config` 同树编译。第三方 feed（alist/mosdns/vantage）写入固件的是编译时快照地址，snapshot 滚动后其在线源可能 404；官方 base/packages/luci/routing/telephony/video 源不受影响。
-7. **iStore 方案已弃用**：`luci-app-store` 依赖 GNU `tar`，当前 master apk 构建下 GNU tar 未被 `make defconfig` 选中（snapshot 二进制仓库也无 `tar.apk`，仅 `bsdtar`），store 主包连同 `tar` 被 defconfig 剔除；同 feed 的 `taskd`/`luci-lib-taskd`/`luci-lib-xterm` 虽能编入，但缺主面板后端空转。故改用官方 `luci-app-package-manager` 承担图形化装包；`luci-compat`、`luci-lua-runtime` 仍保留，供后期老式 Lua 面板兜底。
+6. **后期在线装包的限制（snapshot）**：用户态服务/面板/库（daemon、`luci-app-*`、lib）可在官方软件包面板或 `apk add <包名>` 直接装；但带内核模块的包（`kmod-*`）必须与当前内核版本严格匹配，snapshot 内核滚动更新后在线 kmod 可能装不上或版本不符——这类需求最好在编译阶段就写进 `.config` 同树编译。第三方 feed（alist/mosdns/vantage）写入固件的是编译时快照地址，snapshot 滚动后其在线源可能 404；官方 base/packages/luci/routing/telephony/video 源不受影响。part2 的 `99-remove-thirdparty-feeds` 首启会把 distfeeds.list 里 alist/mosdns/vantage 三行无效运行时源删掉（编译期源码保留、已装包不受影响），避免 `apk update` 报 EOF/404。
+7. **iStore（B 方案：去 GNU tar 依赖）**：上游 `luci-app-store` 的 `LUCI_DEPENDS` 写死 `+tar`（GNU tar），早期 build-10 在 master apk 构建下 GNU tar 未被 defconfig 选中，store 连带被剔。复核 store 脚本仅用 `tar -c/-czf/-zxf/-xz/-C`，busybox tar 均可替代；故 B 方案由 part2 用 sed 去掉 store Makefile 的 `+tar` 硬依赖，不编入 GNU tar，改用 busybox tar。`taskd`/`luci-lib-taskd`/`luci-lib-xterm` 随 store 链编入；官方 `luci-app-package-manager` 保留作兜底。`luci-compat`、`luci-lua-runtime` 供老式 Lua 面板兜底。注意：store 是旧 Lua controller + htm 视图，在 luci 26.x + vantage 下可能样式错位；istoreos 在线源对 snapshot master 的包匹配度需内存启动实测。
 8. **老式 Lua CBI 面板需 `luci-compat`**：新 luci 默认只带 `luci-lua-runtime`，不含旧版 `luci.cbi`；第三方老式 Lua 面板（如 zerotier 面板）若 `require("luci.cbi")`，缺 `luci-compat` 会报 `module 'luci.cbi' not found`。本固件已编入 `luci-compat` 兜底；但个别更老面板还可能依赖已被 master 移除的其他 Lua 模块，仍可能报错，以固化后实测为准。
 9. **Packet path 流程图已挂到概览顶端**：vantage `nftflow` 原本只在 状态 → Nftables 页由 `menu-vantage.js` 按 `data-page==='admin-status-nftables'` 拦截挂载。源码复核其 `draw()` 主体由 `nft --json list ruleset` 数据独立生成，不依赖 Nftables 页规则卡；耦合点仅入口页面判断与 `.nft-table` 锚点。方案：概览 `include/15_flow.js` 注册一张卡片，先放 `.nft-table` 占位（CSS 默认 `display:none`，无空框残留），再 `L.require('vantage-theme.nftflow').attach(#view)`；卡片仅首次 render 返回占位，概览轮询重建 DOM 时返回 `null` 保留已画流程图。已在内存系统实测：流程图在概览顶端、轮询不丢、无重复挂载。规则表模式下规则步骤条件对齐依赖 Nftables 页原始规则行，概览会略简，默认"流向"模式完整。
 
@@ -110,7 +110,8 @@
 - build-9（run 44025902005，success）复核：`luci-app-store`、`luci-lib-taskd`、`taskd`、`luci-lib-xterm` 及依赖在 manifest/config.buildinfo 全部为 0；其它第三方 feed（vantage/alist/mosdns）均正常编入。
 - build-10（run 44040250337，success，266 包）复核：加固后 `luci-lib-taskd`、`taskd`、`luci-lib-xterm` 及 libuci-lua/mount-utils/script-utils/coreutils/coreutils-stty/luci-lua-runtime/luci-compat 均进 world；但 **`luci-app-store` 与 `tar` 仍被 defconfig 剔除**。
 - 根因方向：store 的 `LUCI_DEPENDS` 写死 `+tar`（GNU tar）；当前 master apk 构建下 GNU tar 未被 defconfig 选中（snapshot 二进制仓库 packages/base 目录均无 `tar.apk`，仅 `bsdtar`），依赖不可满足导致 store 连带被剔；tar 本体同样未进。store 脚本仅做 `tar -czf/-zxf` 打解 gzip，busybox tar 可替代。
-- 决定：不再追 iStore。图形化装包改用官方 `luci-app-package-manager`（依赖仅 `+luci-base`，后端 `package-manager-call` 已适配 apk，自带 zh_Hans）；part1 注释 istore 源、part2 移除 istore 兜底段，`.config` 取消 store/taskd/xterm/tar 勾选，保留 `luci-compat`、`luci-lua-runtime` 作 Lua 面板兜底。
+- 早期处置：一度改用官方 `luci-app-package-manager`（依赖仅 `+luci-base`，后端已适配 apk，自带 zh_Hans），part1 注释 istore 源、`.config` 取消 store/taskd/xterm/tar 勾选。
+- **B 方案重试（当前）**：复核 store 脚本 tar 用法全为 busybox 可替代的标准参数，故 part1 重新接 istore feed，`.config` 勾 `luci-app-store`/`luci-lib-taskd`/`taskd`/`luci-lib-xterm`，part2 在 feeds install 后 sed 去掉 store Makefile 的 `+tar` 依赖；不编入 GNU tar。官方 package-manager 保留共存兜底。待重编后内存启动实测 iStore 面板与在线装包。
 - 教训：第三方 luci-app 必须**先在 part1 接对应 feed，再在 .config 勾选**；只勾 .config 不接 feed，包会被 defconfig 静默移除，且编译不一定报错。
 
 **第三轮固件实测：wan6 接口页报"不支持的协议类型"**
@@ -133,7 +134,7 @@
 - `luci-app-sqm`：带宽 QoS 调度
 - `luci-app-tailscale`：异地内网穿透（替代/补充 ZeroTier）
 
-> upnp / nlbwmon / ttyd / kmod-tun / zerotier 已在 `.config` 编入；zerotier 官方无 luci 图形面板，用 `zerotier-cli` 命令行管理。
+> upnp / nlbwmon / ttyd / kmod-tun / zerotier 已在 `.config` 编入；ZeroTier 自适配面板随 `files/` 内置（VPN→ZeroTier），`zerotier-cli` 备用；iStore 链（store/lib-taskd/taskd/xterm）按 B 方案编入，GNU tar 不编入。
 
 ## 七、待办
 
@@ -141,7 +142,7 @@
 - [ ] 把补了 Web 基础包的新 `.config` 提交到 GitHub，重新触发 Action 编译。
 - [ ] 新固件出包后：U-Boot「uImage 启动」页启动新 `initramfs-uImage.itb` → 进系统确认 LuCI 面板/插件正常 → 上传 `squashfs-sysupgrade.bin` 执行系统内升级写 eMMC。
 - [ ] 固化后核对：默认 IP `192.168.18.254`、主机名 `MaskMan7WRT`、vantage 主题、Docker 与各插件开机自启。
-- [x] 本轮已加入：upnp、nlbwmon（流量监控）、ttyd（网页终端）、kmod-tun（TUN 模块）、zerotier 客户端本体；zerotier 官方无 luci 面板，命令行管理。
-- [ ] 待重编验证：新固件 world 应含官方 `luci-app-package-manager`（及对应 `luci-i18n-package-manager-zh-cn`）与 `zerotier`（含 libstdcpp/libminiupnpc/libnatpmp/libatomic 依赖）；内存启动后 系统 → 软件包 面板可列出已装/可装包、可在线 apk add/del，`zerotier-cli info` 正常。iStore 链（store/taskd/xterm/tar）不再编入。
+- [x] 本轮已加入：upnp、nlbwmon（流量监控）、ttyd（网页终端）、kmod-tun（TUN 模块）、zerotier 客户端本体；自适配 ZeroTier Lua 面板随 `files/` 内置。
+- [ ] 待重编验证：新固件 world 应含官方 `luci-app-package-manager`（及对应 `luci-i18n-package-manager-zh-cn`）、`zerotier`（含 libstdcpp/libminiupnpc/libnatpmp/libatomic 依赖）与 iStore 链 `luci-app-store`/`luci-lib-taskd`/`taskd`/`luci-lib-xterm`（**不含** GNU tar）；内存启动后 系统 → 软件包 面板可列出已装/可装包、可在线 apk add/del，`zerotier-cli info` 正常，**VPN → ZeroTier 状态/设置** 可打开、回填与保存正常，**iStore 面板**可打开、商店列表/装包正常、旧 Lua 视图不报错。
 - [x] Packet path 流程图已移植到概览顶端（内存系统实测通过）；part2 已内联 `15_flow.js`，重编后随固件固化。
 - [ ] 待定：代理最终选 OpenClash 还是 Passwall；是否再追加 watchcat/sqm/tailscale 等插件。

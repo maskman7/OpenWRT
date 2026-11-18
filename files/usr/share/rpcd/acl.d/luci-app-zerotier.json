@@ -1,0 +1,9 @@
+{
+	"description": "LuCI support for ZeroTier",
+	"read": {
+		"uci": [ "zerotier" ]
+	},
+	"write": {
+		"uci": [ "zerotier" ]
+	}
+}

@@ -61,6 +61,30 @@ return baseclass.extend({
 });
 FLOWEOF
 
-# 5. iStore 链兜底链接已移除：方案弃用，图形化装包改用官方 luci-app-package-manager
-#    （随官方 luci feed，feeds install -a 自动链接，无需此处兜底）。
-#    原逻辑：feeds update istore → feeds install -d y -p istore luci-app-store → 链接 taskd/xterm/lib-taskd。
+# 5. iStore 链由 feeds install -a 自动链接（part1 已接 istore feed，.config 已勾 store 链）；
+#    无需在此手动 feeds install 兜底。官方 luci-app-package-manager 共存作兜底。
+
+# 6. 首启清理运行时无效第三方 apk 源：
+#    part1 克隆 vantage/alist/mosdns 源码仅用于编译进固件；官方 snapshot 仓库没有对应
+#    aarch64_cortex-a53/<feed>/packages.adb 目录，运行时 apk update 会对这三行报 EOF/404。
+#    已编入固件的包不受影响，这里只把 distfeeds.list 里的第三方源行删掉。
+cat > package/base-files/files/etc/uci-defaults/99-remove-thirdparty-feeds <<'EOF'
+#!/bin/sh
+F=/etc/apk/repositories.d/distfeeds.list
+[ -f "$F" ] || exit 0
+sed -i -E '\#/(alist|mosdns|vantage)/packages\.adb#d' "$F"
+exit 0
+EOF
+chmod +x package/base-files/files/etc/uci-defaults/99-remove-thirdparty-feeds
+
+# 7. iStore（B 方案）：去掉 luci-app-store 对 GNU tar 的硬依赖，改用 busybox tar。
+#    store 脚本仅用 tar -c/-czf/-zxf/-xz/-C，busybox tar 均可替代；GNU tar 不编入，
+#    避免 master apk 构建下 tar 未被 defconfig 选中而把 store 连带剔除。
+STORE_MK="$(find feeds package/feeds -path '*luci-app-store/Makefile' 2>/dev/null | head -n1)"
+if [ -n "$STORE_MK" ]; then
+	sed -i 's/ +tar//' "$STORE_MK"
+	echo "[part2] store Makefile 去 tar 依赖: $STORE_MK"
+	grep '^LUCI_DEPENDS=' "$STORE_MK"
+else
+	echo "[part2] 警告: 未找到 luci-app-store/Makefile，istore feed 可能未拉取，store 将不编入。"
+fi
