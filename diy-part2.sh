@@ -91,14 +91,15 @@ else
 	echo "[part2] 警告: 未找到 luci-app-store/Makefile，istore feed 可能未拉取，store 将不编入。"
 fi
 
-# 8. luci-app-diskman（磁盘管理面板）：上游硬依赖 +exfat-mkfs +exfat-fsck 属于旧 exfat-utils，
-#    master 已移除该包，改为 exfatprogs 提供 mkfs/fsck；不替换则依赖不可满足、包编译失败。
+# 8. luci-app-diskman（磁盘管理面板）：依赖 exfat-mkfs / exfat-fsck。
+#    注意：master 中这两个包的“源码包”已由 exfat-utils 换成 exfatprogs，但**子包名未变**
+#    （exfatprogs 只是 PKG_NAME，实际只产出 exfat-mkfs/exfat-fsck 两个包，没有 exfatprogs 包）。
+#    因此原依赖有效，切勿替换成 +exfatprogs —— build-17 曾因此报
+#    "dependency on 'exfatprogs', which does not exist" 导致 package/install 失败。
 DISKMAN_MK="$(find feeds package/feeds -path '*luci-app-diskman/Makefile' 2>/dev/null | head -n1)"
 if [ -n "$DISKMAN_MK" ]; then
-	sed -i 's/+exfat-mkfs +exfat-fsck/+exfatprogs/' "$DISKMAN_MK"
-	echo "[part2] diskman exfat 依赖已替换为 exfatprogs: $DISKMAN_MK"
-	# 诊断命令同样加 || true，避免 errexit 下中断。
-	grep 'exfatprogs' "$DISKMAN_MK" || true
+	echo "[part2] diskman 面板就位（沿用上游 exfat-mkfs/exfat-fsck 依赖）: $DISKMAN_MK"
+	grep 'exfat-mkfs' "$DISKMAN_MK" || true
 else
 	echo "[part2] 警告: 未找到 luci-app-diskman/Makefile，diskman feed 可能未拉取，磁盘管理将不编入。"
 fi
