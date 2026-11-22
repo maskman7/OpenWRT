@@ -1,0 +1,50 @@
+#!/bin/sh
+# U 盘插入（block hotplug）：登记 /mnt/usb 挂载点 → 建下载目录 → 拉起 aria2
+# 目的：插上盘就能用，不用每次进面板手动挂载；且没有盘时绝不在 eMMC 上建下载目录。
+
+[ "$ACTION" = "add" ] || exit 0
+case "$DEVNAME" in
+	sd*) ;;
+	*) exit 0 ;;
+esac
+[ -b "/dev/$DEVNAME" ] || exit 0
+
+TARGET=/mnt/usb
+DL="$TARGET/downloads"
+
+# 给 blockd 一点时间先按已有 fstab 完成挂载
+sleep 2
+
+if ! grep -qs " $TARGET " /proc/mounts; then
+	if grep -qs "option target '$TARGET'" /etc/config/fstab; then
+		# 已有登记，交给 block mount 按 UUID 挂载
+		block mount
+	else
+		UUID=$(block info "/dev/$DEVNAME" 2>/dev/null | grep -o 'UUID="[^"]*"' | head -n1 | cut -d'"' -f2)
+		FSTYPE=$(block info "/dev/$DEVNAME" 2>/dev/null | grep -o 'TYPE="[^"]*"' | head -n1 | cut -d'"' -f2)
+		if [ -n "$UUID" ]; then
+			SEC=$(uci add fstab mount)
+			uci set "fstab.$SEC.uuid=$UUID"
+			uci set "fstab.$SEC.target=$TARGET"
+			uci set "fstab.$SEC.fstype=${FSTYPE:-auto}"
+			uci set "fstab.$SEC.options=rw,noatime"
+			uci set "fstab.$SEC.enabled=1"
+			uci commit fstab
+			logger -t usb-dl "已登记 /dev/$DEVNAME（${FSTYPE:-auto}）挂载到 $TARGET"
+			block mount
+		else
+			logger -t usb-dl "/dev/$DEVNAME 没有 UUID（可能未格式化），请在「磁盘管理」里处理后挂载"
+		fi
+	fi
+fi
+
+if grep -qs " $TARGET " /proc/mounts; then
+	mkdir -p "$DL/.aria2" 2>/dev/null
+	[ -f "$DL/.aria2/session" ] || : > "$DL/.aria2/session"
+	/etc/init.d/aria2 restart >/dev/null 2>&1
+	logger -t usb-dl "$DEVNAME 已挂载到 $TARGET，下载目录就绪，aria2 已重启"
+else
+	logger -t usb-dl "$DEVNAME 已插入但未挂到 $TARGET，请到「磁盘管理」手动挂载"
+fi
+
+exit 0

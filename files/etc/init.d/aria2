@@ -1,0 +1,50 @@
+#!/bin/sh /etc/rc.common
+# aria2 服务（ER1 固件内置）
+# 关键设计：只有 /mnt/usb 真正挂载后才启动，U 盘没挂上时宁可不下载，
+# 也不要把数据写进 8GB eMMC（否则根分区很快被写满，机器变砖）。
+
+START=96
+STOP=15
+USE_PROCD=1
+
+PROG=/usr/bin/aria2c
+CONF=/etc/aria2.conf
+DLROOT=/mnt/usb/downloads
+
+is_mounted() {
+	grep -qs " /mnt/usb " /proc/mounts
+}
+
+prepare_dir() {
+	mkdir -p "$DLROOT/.aria2" 2>/dev/null || return 1
+	[ -f "$DLROOT/.aria2/session" ] || : > "$DLROOT/.aria2/session"
+	return 0
+}
+
+start_service() {
+	mkdir -p /mnt/usb
+
+	if ! is_mounted; then
+		logger -t aria2 "U盘未挂载到 /mnt/usb，暂不启动 aria2（防止写满 eMMC）；插盘后会自动拉起"
+		return 0
+	fi
+
+	if ! prepare_dir; then
+		logger -t aria2 "无法创建下载目录 $DLROOT，跳过启动"
+		return 0
+	fi
+
+	procd_open_instance
+	procd_set_param command "$PROG" --conf-path="$CONF"
+	# 异常退出后 5 秒重启，1 小时内最多 5 次，避免空转
+	procd_set_param respawn 3600 5 5
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_set_param nice 10
+	procd_close_instance
+}
+
+reload_service() {
+	stop
+	start
+}

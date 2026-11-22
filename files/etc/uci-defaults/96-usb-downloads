@@ -1,0 +1,42 @@
+#!/bin/sh
+# 首次启动执行一次（执行成功后 OpenWrt 会自动删除本脚本）：
+# 若此时已经插着 U 盘，就把它固化成 /mnt/usb 开机自动挂载；并建好下载目录骨架。
+# 若首启没有盘，则什么都不做——之后插盘由 /etc/hotplug.d/block/90-usb-downloads 自动登记。
+
+TARGET=/mnt/usb
+mkdir -p "$TARGET"
+
+if grep -qs "option target '$TARGET'" /etc/config/fstab; then
+	exit 0
+fi
+
+DEV=""
+for d in $(block info 2>/dev/null | cut -d: -f1); do
+	case "$d" in
+		/dev/sd*) DEV="$d"; break ;;
+	esac
+done
+
+if [ -z "$DEV" ]; then
+	logger -t usb-dl "首启未检测到 USB 分区，跳过自动挂载登记（插盘后由 hotplug 自动登记）"
+	exit 0
+fi
+
+UUID=$(block info "$DEV" 2>/dev/null | grep -o 'UUID="[^"]*"' | head -n1 | cut -d'"' -f2)
+FSTYPE=$(block info "$DEV" 2>/dev/null | grep -o 'TYPE="[^"]*"' | head -n1 | cut -d'"' -f2)
+
+if [ -z "$UUID" ]; then
+	logger -t usb-dl "$DEV 无 UUID（可能未格式化），请在「磁盘管理」里处理"
+	exit 0
+fi
+
+SEC=$(uci add fstab mount)
+uci set "fstab.$SEC.uuid=$UUID"
+uci set "fstab.$SEC.target=$TARGET"
+uci set "fstab.$SEC.fstype=${FSTYPE:-auto}"
+uci set "fstab.$SEC.options=rw,noatime"
+uci set "fstab.$SEC.enabled=1"
+uci commit fstab
+
+logger -t usb-dl "已登记 $DEV（${FSTYPE:-auto}）开机自动挂载到 $TARGET"
+exit 0

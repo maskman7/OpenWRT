@@ -103,3 +103,20 @@ if [ -n "$DISKMAN_MK" ]; then
 else
 	echo "[part2] 警告: 未找到 luci-app-diskman/Makefile，diskman feed 可能未拉取，磁盘管理将不编入。"
 fi
+
+# 9. 下载机（aria2 + AriaNg）：确保内置服务脚本可执行，并做存在性诊断。
+#    files/ 已在 workflow 早期 mv 成 openwrt/files，所以此处用相对路径 files/...
+ARIA2_INIT="files/etc/init.d/aria2"
+ARIA2_HOTPLUG="files/etc/hotplug.d/block/90-usb-downloads"
+ARIA2_DEFAULTS="files/etc/uci-defaults/96-usb-downloads"
+if [ -f "$ARIA2_INIT" ]; then
+	chmod 0755 "$ARIA2_INIT" "$ARIA2_HOTPLUG" "$ARIA2_DEFAULTS" 2>/dev/null || true
+	echo "[part2] aria2 下载机脚本就位"
+	ls -l "$ARIA2_INIT" "$ARIA2_HOTPLUG" "$ARIA2_DEFAULTS" 2>/dev/null || true
+else
+	echo "[part2] 警告: 未找到 $ARIA2_INIT，aria2 将只有二进制、没有开机服务"
+fi
+grep -q 'CONFIG_PACKAGE_aria2=y' .config && echo "[part2] aria2 已勾选" || echo "[part2] 警告: .config 未勾选 aria2"
+grep -q 'CONFIG_PACKAGE_ariang=y' .config && echo "[part2] ariang 已勾选" || echo "[part2] 警告: .config 未勾选 ariang"
+
+exit 0
