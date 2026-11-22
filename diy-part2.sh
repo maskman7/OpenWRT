@@ -109,14 +109,21 @@ fi
 ARIA2_INIT="files/etc/init.d/aria2"
 ARIA2_HOTPLUG="files/etc/hotplug.d/block/90-usb-downloads"
 ARIA2_DEFAULTS="files/etc/uci-defaults/96-usb-downloads"
+ARIA2_SECRET="files/etc/uci-defaults/97-aria2-secret"
+ARIA2_CONF="files/etc/aria2.conf"
 if [ -f "$ARIA2_INIT" ]; then
-	chmod 0755 "$ARIA2_INIT" "$ARIA2_HOTPLUG" "$ARIA2_DEFAULTS" 2>/dev/null || true
+	chmod 0755 "$ARIA2_INIT" "$ARIA2_HOTPLUG" "$ARIA2_DEFAULTS" "$ARIA2_SECRET" 2>/dev/null || true
 	echo "[part2] aria2 下载机脚本就位"
-	ls -l "$ARIA2_INIT" "$ARIA2_HOTPLUG" "$ARIA2_DEFAULTS" 2>/dev/null || true
+	ls -l "$ARIA2_INIT" "$ARIA2_HOTPLUG" "$ARIA2_DEFAULTS" "$ARIA2_SECRET" 2>/dev/null || true
 else
 	echo "[part2] 警告: 未找到 $ARIA2_INIT，aria2 将只有二进制、没有开机服务"
 fi
 grep -q 'CONFIG_PACKAGE_aria2=y' .config && echo "[part2] aria2 已勾选" || echo "[part2] 警告: .config 未勾选 aria2"
 grep -q 'CONFIG_PACKAGE_ariang=y' .config && echo "[part2] ariang 已勾选" || echo "[part2] 警告: .config 未勾选 ariang"
+if grep -q 'rpc-secret=' "$ARIA2_CONF" 2>/dev/null; then
+	echo "[part2] aria2 口令策略：留空占位，首启随机生成"
+else
+	echo "[part2] 警告: 未找到 files/etc/aria2.conf 的 rpc-secret 行"
+fi
 
 exit 0
